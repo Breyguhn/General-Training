@@ -1,0 +1,71 @@
+### General Note ###
+
+#:::::::::::::::::::: Memory & Assembly Basics ::::::::::::::::::::#
+
+Stack grows from high to low (backwards from natural)
+The Stack is where the program stores variables that are passed to functions <<int function(int a)>> a copy of the variable "a" will be passed to the stack and any modifications to it are to the copy until it is returned back to the calling function.
+
+Two types of assembly AT&T and Intel: 
+AT&T = mov src dest
+Intel = mov dest src
+
+Intel x86 (the most common processors) are little endian, this means that words are copied from registers to memeory with the least significant bit being stored at the lowest address (the last bit in the register)
+
+bf ff a0 c2 == little endian == low addr -> c2 a0 ff bf <- high addr
+
+The stack lives at the higher addresses (usually 0xbfffffxx) <<fact check!>> and grows towards lower addresses. The code or "text" and global data are held at lower addresses (around 0x08480000). The heap is located after the global data and is used for dynamic memory allocations.
+
+Stack == I know how much memory I need to hold this variable.
+Heap == I don't know how much I need so the kernel has to do it on the fly.
+
+The stack supports "pop" and "push" operations to move data off and onto the stack accordingly. These two modify the esp (stack pointer (top of the stack)) when you "push" a value from the register to the stack you decrement the esp by one WORD (4 bytes?) because it grows from high to low, and "pop" will incrememt the esp because its shrinking back to its point of origin which is the highest memory address.
+
+The stack is used by the compiler to manage function calls. Each function gets its own "Stack Frame" where it keeps its own local and temporary values. The registers "esp" (top of the stack) and "ebp" (base <origin addr> of the stack) always point to the current active stack, this means that if a function calls another function, the "callee's" stack will be the active stack and the esp and ebp registers will be updated accordingly. When a function finishes and returns back to the original "caller" function the esp and ebp registers need to be updated with the "caller's" stack values. 
+
+How do the esp and ebp registers know where the top/base of the "callers" stack are?? Well thats why a portion of the "callees" stack is taken by "meta data" storing infromation such as the "return pointer" which holds the instruction to jump to the section of memory containing the "callers" stack frame. "JUMP ESP" 
+
+** activation frame == stack frame **
+** call stack == all the stack frames **
+
+* Function Prologue: When a function is called it initiate the "Function Prologue" which saves the value of the current frame stacks (callers) ebp in the "Frame Pointer" on the new (callee's) stack. The "Function Prologue" then updates the esp to point to the base of the new stack frame (ontop of the "Frame Pointer" so it doesn't get overwritten). It then proceeds to save any other register (as defined by the calling convention used) ontop of the new ebp. Finally it will move the esp to the top of the new stack by subtracting from the ebp the ammount of bytes needed to hold local and temp variable <<because the stack grows down so it subtracts>>
+
+* Function Epilogue: When a function return (completes) the "Function Epilogue" is executed. Which takes care of setting the stack back to the "caller's" stack frame. Any registers that were stored in the "callee's" stack during the "Function Prologue" are restored, including the "Frame Pointer" (the caller's ebp) which sets the current ebp to match the caller's frame, then execution is directed to the return address (caller's original esp) thus handing back control to the caller stack frame.
+
+
+#:::::::::::::::::::: Diving into cmsg ::::::::::::::::::::#
+
+cmsg is the program which was used to demonstrate buffer overflows within the "Smashing the Stack for Fun and Profit" paper. We will be recreating that BOverflow.
+
+suid - set user id -- sets the running user's effective UID to that of the owner (root in the case of passwd)
+
+GDB - Gnu DeBugger -- cli tool for debugging.
+
+``` $ gdb ./cmsg ```  to run a program within gdb
+
+#:::::: gdb commands ::::::#
+
+Looking at source code and assembly
+• list <function>: if available, shows the source code of that function.
+• disass <function>: disassembles a function and shows the relative assembly instructions.
+• set disassembly-flavor intel/att: switches between Intel and AT&T favor. AT&T is the default.
+
+Break points and execution control
+• break *<address>: sets a breakpoint at the desired address (can also bethe name of a function).
+• info brerakpoints: show breakpoints.
+• delete breakpoint <num>: removes a breakpoint
+• run <args>: runs a program with the specified arguments
+• continue: continue execution until the next breakpoint
+• step: step over a single source instruction, does not go into function calls
+• next: like step, but goes into function calls
+• stepi/nexti: like step and next, but deal with assembly instructions (we'll use these mostly)
+• backtrace: shows the current call trace Examining memory and register values
+• print <reg, variable>: prints the value of a register or a variable
+• x/<num><type> <address>: examines the content of a memory location. It is possible to specify a number of values to read starting from that memory location and how to print and interpret those values. 
+Here are some examples:
+
+◦ x/20wx $esp: prints 20 words in hexadecimal notation from the top of the stack.
+◦ x/10bx $esp: prints 10 bytes in hexadecimal notation from the top of the stack.
+◦ x/s 0xbffff9a0: prints the string at address 0xbff9a0.
+• info registers: shows the value of a registers
+
+
